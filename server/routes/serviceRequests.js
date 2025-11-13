@@ -5,11 +5,32 @@ import Mechanic from "../models/Mechanic.js";
 
 const router = express.Router();
 
+// Helper: geocode address using Nominatim (OpenStreetMap)
+async function geocodeAddress(address) {
+  try {
+    const response = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`,
+      { headers: { "User-Agent": "DriveAid/1.0" } }
+    );
+    const data = await response.json();
+    if (data && data.length > 0) {
+      return {
+        type: "Point",
+        coordinates: [parseFloat(data[0].lon), parseFloat(data[0].lat)]
+      };
+    }
+  } catch (err) {
+    console.error("Geocoding error:", err);
+  }
+  return null;
+}
+
 /**
  * ====================================================
  *  GET /service-requests
  *  - Admin: see all requests
- *  - Mechanic: see pending (unassigned) + their own
+ *  - Mechanic: see pending (unassigned) + requests assigned to them
+ *  - Driver: see their own requests
  * ====================================================
  */
 router.get("/", auth(), async (req, res) => {
@@ -29,6 +50,8 @@ router.get("/", auth(), async (req, res) => {
           ...(mechId ? [{ mechanicId: mechId }] : []),
         ],
       };
+    } else if (role === "driver") {
+      query = { driverId: id };
     }
 
     // Admin sees all
@@ -46,24 +69,39 @@ router.get("/", auth(), async (req, res) => {
 /**
  * ====================================================
  *  POST /service-requests
- *  - Admin creates a new service request
+ *  - Admin or Driver creates a new service request
  * ====================================================
  */
-router.post("/", auth("admin"), async (req, res) => {
+router.post("/", auth(), async (req, res) => {
   try {
+    const { role, id } = req.user;
+    if (!(role === "admin" || role === "driver")) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+
     const { problemDescription, address } = req.body;
 
     if (!problemDescription || !address) {
       return res.status(400).json({ message: "Missing required fields" });
     }
 
+    // Geocode address to coordinates
+    const userLocation = await geocodeAddress(address);
+
     const newRequest = new ServiceRequest({
       problemDescription,
       address,
+      userLocation,
+      driverId: role === "driver" ? id : undefined,
       status: "Pending",
     });
 
     const savedRequest = await newRequest.save();
+    
+    // Emit socket event
+    const io = req.app.get("io");
+    if (io) io.emit("request:new", savedRequest);
+    
     res.status(201).json(savedRequest);
   } catch (err) {
     console.error("Error creating service request:", err);
