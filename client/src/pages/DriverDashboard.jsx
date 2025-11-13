@@ -11,8 +11,10 @@ import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from ".
 
 const socket = io("http://localhost:5001");
 
-function MechanicDashboard() {
+export default function DriverDashboard() {
   const [requests, setRequests] = useState([]);
+  const [problemDescription, setProblemDescription] = useState("");
+  const [address, setAddress] = useState("");
   const [activeRequest, setActiveRequest] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
@@ -23,14 +25,18 @@ function MechanicDashboard() {
 
   const headers = { Authorization: `Bearer ${token}` };
 
-  // Fetch service requests assigned to mechanic
+  const fetchRequests = async () => {
+    const res = await axios.get("http://localhost:5001/service-requests", { headers });
+    setRequests(res.data);
+  };
+
   useEffect(() => {
-    if (role !== "mechanic") {
-      alert("You must be a mechanic to access this page.");
+    if (role !== "driver") {
+      alert("You must be a driver to access this page.");
       navigate("/");
       return;
     }
-    refreshRequests();
+    fetchRequests();
   }, [role]);
 
   useEffect(() => {
@@ -44,50 +50,26 @@ function MechanicDashboard() {
     };
   }, [activeRequest]);
 
-  // Accept request
-  const acceptRequest = async (id) => {
-    try {
-      await axios.post(
-        `http://localhost:5001/service-requests/${id}/accept`,
-        {},
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      alert("Request accepted ✅");
-      refreshRequests();
-    } catch (err) {
-      console.error(err);
-      alert("Error accepting request");
-    }
-  };
-
-  // Update status
-  const updateStatus = async (id, status) => {
-    try {
-      await axios.post(
-        `http://localhost:5001/service-requests/${id}/status`,
-        { status },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      alert(`Status updated to ${status} ✅`);
-      refreshRequests();
-    } catch (err) {
-      console.error(err);
-      alert("Error updating status");
-    }
-  };
-
-  // refresh helper
-  const refreshRequests = async () => {
-    const res = await axios.get("http://localhost:5001/service-requests", { headers });
-    setRequests(res.data);
+  const createRequest = async (e) => {
+    e.preventDefault();
+    await axios.post(
+      "http://localhost:5001/service-requests",
+      { problemDescription, address },
+      { headers }
+    );
+    setProblemDescription("");
+    setAddress("");
+    fetchRequests();
   };
 
   const openChat = async (req) => {
     setActiveRequest(req);
+    // join room
     if (!joinedRoomsRef.current[req._id]) {
       socket.emit("join_room", req._id);
       joinedRoomsRef.current[req._id] = true;
     }
+    // load history
     const { data } = await axios.get(`http://localhost:5001/chat/${req._id}`, { headers });
     setMessages(data);
   };
@@ -120,22 +102,58 @@ function MechanicDashboard() {
 
   return (
     <DashboardLayout
-      title="Mechanic Dashboard"
-      icon="🔧"
-      gradient="from-emerald-600 via-teal-600 to-cyan-700"
+      title="Driver Dashboard"
+      icon="🚗"
+      gradient="from-blue-600 via-cyan-600 to-teal-700"
     >
       <div className="space-y-8">
 
+        {/* Create Request Section */}
+        <Card className="p-6">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
+              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+              </svg>
+            </div>
+            <h2 className="text-xl font-semibold text-gray-900">Request Roadside Assistance</h2>
+          </div>
+          
+          <form onSubmit={createRequest} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Input
+              placeholder="Describe your problem"
+              value={problemDescription}
+              onChange={(e) => setProblemDescription(e.target.value)}
+              required
+            />
+            <Input
+              placeholder="Your current location"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              required
+            />
+            <div className="md:col-span-2">
+              <Button type="submit" className="w-full md:w-auto">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                Request Help
+              </Button>
+            </div>
+          </form>
+        </Card>
+
+        {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Requests Table */}
           <Card className="p-6">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
                 <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                 </svg>
               </div>
-              <h2 className="text-xl font-semibold text-gray-900">Service Requests</h2>
+              <h2 className="text-xl font-semibold text-gray-900">My Service Requests</h2>
             </div>
             
             {requests.length === 0 ? (
@@ -143,7 +161,7 @@ function MechanicDashboard() {
                 <svg className="w-8 h-8 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
-                <p className="text-gray-500">No service requests available.</p>
+                <p className="text-gray-500">No requests yet. Create your first request above!</p>
               </div>
             ) : (
               <Table>
@@ -152,14 +170,14 @@ function MechanicDashboard() {
                     <TableHead>Problem</TableHead>
                     <TableHead>Location</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Actions</TableHead>
+                    <TableHead>Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {requests.map((r) => (
                     <TableRow key={r._id}>
                       <TableCell className="font-medium">{r.problemDescription}</TableCell>
-                      <TableCell className="text-gray-500">{r.address || '-'}</TableCell>
+                      <TableCell className="text-gray-500">{r.address}</TableCell>
                       <TableCell>
                         <Badge variant={
                           r.status === "Pending" ? "pending" :
@@ -169,38 +187,16 @@ function MechanicDashboard() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <div className="flex gap-2">
-                          {r.status === "Pending" && (
-                            <Button
-                              variant="success"
-                              size="sm"
-                              onClick={() => acceptRequest(r._id)}
-                            >
-                              Accept
-                            </Button>
-                          )}
-                          {r.status === "Accepted" && (
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              onClick={() => updateStatus(r._id, "Completed")}
-                            >
-                              Complete
-                            </Button>
-                          )}
-                          {r.status !== "Pending" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => openChat(r)}
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                              </svg>
-                              Chat
-                            </Button>
-                          )}
-                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openChat(r)}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                          </svg>
+                          Chat
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -212,12 +208,12 @@ function MechanicDashboard() {
           {/* Chat Panel */}
           <Card className="p-6">
             <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
                 <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
               </div>
-              <h2 className="text-xl font-semibold text-gray-900">Customer Chat</h2>
+              <h2 className="text-xl font-semibold text-gray-900">Live Chat</h2>
               {activeRequest && (
                 <Badge variant="primary" className="ml-auto">
                   {activeRequest.status}
@@ -230,8 +226,8 @@ function MechanicDashboard() {
                 <svg className="w-10 h-10 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
-                <p className="text-gray-500 text-lg font-medium">Accept a request to start chatting</p>
-                <p className="text-gray-400 text-sm mt-2">Communicate with customers about their service needs</p>
+                <p className="text-gray-500 text-lg font-medium">Select a request to start chatting</p>
+                <p className="text-gray-400 text-sm mt-2">Communicate with mechanics in real-time</p>
               </div>
             ) : (
               <div className="flex flex-col h-96">
@@ -253,7 +249,7 @@ function MechanicDashboard() {
                     placeholder="Type your message..."
                     className="flex-1"
                   />
-                  <Button onClick={send} disabled={!text.trim()} variant="success">
+                  <Button onClick={send} disabled={!text.trim()}>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
                     </svg>
@@ -268,5 +264,3 @@ function MechanicDashboard() {
     </DashboardLayout>
   );
 }
-
-export default MechanicDashboard;

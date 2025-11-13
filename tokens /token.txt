@@ -1,0 +1,27 @@
+sagarsingh@Sagars-MacBook-Air drive_beta % curl -X POST http://localhost:5001/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@demo.com","password":"admin123"}'
+
+curl -X POST http://localhost:5001/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"mech@demo.com","password":"mech123"}'
+
+{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5MGU0M2RkOTQ0YmMwZDJkNzZkYzk3MSIsInJvbGUiOiJhZG1pbiIsImlhdCI6MTc2MjU0Mjc3MywiZXhwIjoxNzYzMTQ3NTczfQ.BtLW9abZWVcuyUuNbVkFIxfWlF8Q81G3rVLw-kS4WKE","user":{"_id":"690e43dd944bc0d2d76dc971","fullName":"Admin One","email":"admin@demo.com","phone":"9999999999","passwordHash":"$2a$10$L4Hd/4pc2t7qcfEez/MIYOhF22rjf4P5kkAwlNel.vabQBJmRIKPi","role":"admin","createdAt":"2025-11-07T19:09:17.964Z","updatedAt":"2025-11-07T19:09:17.964Z","__v":0}}{"token":"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY5MGU0M2RlOTQ0YmMwZDJkNzZkYzk3NCIsInJvbGUiOiJtZWNoYW5pYyIsImlhdCI6MTc2MjU0Mjc3MywiZXhwIjoxNzYzMTQ3NTczfQ.hFbIMfN9L7q_vLqyLTmDBRb2-H2HyDvp9Ef_jPEOHdc","user":{"_id":"690e43de944bc0d2d76dc974","fullName":"Mech One","email":"mech@demo.com","phone":"8888888888","passwordHash":"$2a$10$YpGm9HAoT6L3fwY1FUsHvey4JXK2lFJ40kutlBta57srgjz.S9vfu","role":"mechanic","createdAt":"2025-11-07T19:09:18.113Z","updatedAt":"2025-11-07T19:09:18.113Z","__v":0}}%  
+
+
+
+
+
+
+
+Enter:
+
+Admin: admin@demo.com
+
+Password: admin123
+
+or
+
+Mechanic: mech@demo.com
+
+Password: mech123
