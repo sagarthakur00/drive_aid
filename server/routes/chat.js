@@ -2,6 +2,7 @@ import express from "express";
 import { auth } from "../middleware/auth.js";
 import ChatMessage from "../models/ChatMessage.js";
 import ServiceRequest from "../models/ServiceRequest.js";
+import Mechanic from "../models/Mechanic.js";
 
 const router = express.Router();
 
@@ -59,7 +60,14 @@ router.post("/:requestId", auth(), async (req, res) => {
     const doc = await ChatMessage.create({ requestId, senderId: req.user.id, message });
 
     const io = req.app.get("io");
-    io.to(`room:${requestId}`).emit("receive_message", doc);
+    const userSockets = req.app.get("userSockets");
+    const senderSocketId = userSockets?.get(req.user.id);
+    // Emit to everyone in the room EXCEPT the sender (they already have it via HTTP response)
+    if (senderSocketId) {
+      io.to(`room:${requestId}`).except(senderSocketId).emit("receive_message", doc);
+    } else {
+      io.to(`room:${requestId}`).emit("receive_message", doc);
+    }
 
     res.status(201).json(doc);
   } catch (err) {

@@ -1,9 +1,6 @@
 import { useState } from "react";
 import axios from "axios";
 import { useNavigate, Link } from "react-router-dom";
-import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui/Input";
-import { Card } from "../components/ui/Card";
 
 function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -14,7 +11,8 @@ function RegisterPage() {
     role: "driver",
   });
   const [showPassword, setShowPassword] = useState(false);
-  const [agreeToTerms, setAgreeToTerms] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -23,191 +21,225 @@ function RegisterPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!agreeToTerms) {
-      alert("Please agree to the terms to continue");
-      return;
-    }
+    setError("");
+    setLoading(true);
     try {
       await axios.post("http://localhost:5001/auth/register", formData);
-      alert("Registration successful. Please login.");
       navigate("/");
     } catch (err) {
-      alert(err.response?.data?.message || "Registration failed");
+      setError(err.response?.data?.message || "Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
+  const roles = [
+    { id: "driver", icon: "🚗", label: "Driver", desc: "Request roadside help" },
+    { id: "mechanic", icon: "🔧", label: "Mechanic", desc: "Provide repair services" },
+    { id: "admin", icon: "👨‍💼", label: "Admin", desc: "Manage the platform" },
+  ];
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 relative overflow-hidden">
-      {/* Enhanced background elements */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-to-br from-purple-500/20 to-blue-500/20 rounded-full blur-3xl animate-float" />
-        <div className="absolute bottom-0 right-0 w-80 h-80 bg-gradient-to-br from-blue-500/20 to-indigo-500/20 rounded-full blur-3xl animate-float" style={{animationDelay: '2s'}} />
-        <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-gradient-to-br from-indigo-500/10 to-purple-500/10 rounded-full blur-3xl animate-float" style={{animationDelay: '4s'}} />
+    <div className="auth-bg">
+      {/* ── Left: hero image ── */}
+      <div className="auth-image-panel">
+        <img
+          src="https://images.unsplash.com/photo-1504307651254-35680f356dfd?auto=format&fit=crop&w=1200&q=80"
+          alt="Mechanic garage"
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          onError={(e) => { e.target.style.display = "none"; }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background: "linear-gradient(135deg, rgba(15,23,42,0.8) 0%, rgba(7,89,133,0.65) 100%)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            padding: "48px",
+          }}
+        >
+          <div className="animate-slide-up">
+            <div className="logo-mark" style={{ color: "#fff", marginBottom: 24 }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: "linear-gradient(135deg,#f59e0b,#d97706)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🔧</div>
+              Drive<span style={{ color: "#f59e0b" }}>Aid</span>
+            </div>
+            <h2 style={{ fontSize: 34, fontWeight: 800, color: "#fff", lineHeight: 1.2, marginBottom: 12 }}>
+              Join Our Network of<br />
+              <span className="gradient-text">Trusted Professionals</span>
+            </h2>
+            <p style={{ color: "rgba(203,213,225,0.8)", fontSize: 15, lineHeight: 1.7, maxWidth: 360, marginBottom: 32 }}>
+              Whether you're a driver in need or a skilled mechanic, DriveAid connects the right people at the right time.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {["✓  Instant matching with nearby mechanics", "✓  Real-time chat & video support", "✓  Transparent pricing & reviews"].map((item) => (
+                <div key={item} style={{ fontSize: 14, color: "#cbd5e1", display: "flex", alignItems: "center", gap: 8 }}>
+                  {item}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="grid md:grid-cols-2 w-full max-w-6xl mx-auto rounded-3xl shadow-2xl overflow-hidden relative z-10">
-        {/* Image Side */}
-        <Card variant="dark" className="hidden md:flex flex-col relative overflow-hidden">
-          <img
-            src="https://img.freepik.com/free-photo/muscular-car-service-worker-repairing-vehicle_146671-19605.jpg"
-            alt="Auto repair"
-            className="absolute inset-0 w-full h-full object-cover object-center"
-          />
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-900/80 via-purple-900/80 to-indigo-900/80" />
-          <div className="relative z-10 p-10 mt-auto mb-10 space-y-6">
-            <div className="inline-flex items-center gap-3 px-4 py-2 rounded-full glass-effect border border-white/20">
-              <span className="gradient-text text-sm font-bold tracking-wide">DRIVEAID</span>
-              <div className="h-2 w-2 rounded-full bg-gradient-to-r from-blue-500 to-purple-500 animate-pulse" />
-            </div>
-            <h2 className="text-4xl font-bold leading-tight text-white drop-shadow-xl">Join DriveAid</h2>
-            <p className="text-gray-200 text-lg max-w-sm leading-relaxed">Choose your role and get started. Drivers request help, mechanics provide services, admins manage the platform.</p>
-          </div>
-        </Card>
+      {/* ── Right: register form ── */}
+      <div className="auth-form-panel animate-fade-in" style={{ padding: "32px 56px" }}>
+        <div style={{ width: "100%", maxWidth: 420 }}>
+          <Link
+            to="/"
+            style={{ fontSize: 13, color: "#64748b", textDecoration: "none", display: "flex", alignItems: "center", gap: 4, marginBottom: 28 }}
+          >
+            ← Back to sign in
+          </Link>
 
-        {/* Form Side */}
-        <Card variant="dark" className="relative flex flex-col p-8 md:p-12">
-          <div className="space-y-2">
-            <Link to="/" className="text-xs text-gray-400 hover:text-gray-300">← Back to login</Link>
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-purple-600 to-blue-600 flex items-center justify-center shadow-lg shadow-purple-600/30">
-                <span className="text-2xl">🚗</span>
+          <h1 style={{ fontSize: 26, fontWeight: 800, color: "#f1f5f9", marginBottom: 4 }}>
+            Create your account
+          </h1>
+          <p style={{ fontSize: 14, color: "#64748b", marginBottom: 28 }}>
+            Fill in your details to get started
+          </p>
+
+          {error && (
+            <div style={{ background: "rgba(239,68,68,0.12)", border: "1px solid rgba(239,68,68,0.25)", borderRadius: 10, padding: "12px 16px", marginBottom: 20, fontSize: 14, color: "#f87171" }}>
+              ⚠ {error}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+            {/* Role picker */}
+            <div className="form-group">
+              <label className="form-label">I am a...</label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+                {roles.map((r) => (
+                  <button
+                    key={r.id}
+                    type="button"
+                    onClick={() => setFormData({ ...formData, role: r.id })}
+                    style={{
+                      padding: "12px 8px",
+                      borderRadius: 10,
+                      border: formData.role === r.id ? "2px solid #f59e0b" : "1.5px solid rgba(148,163,184,0.15)",
+                      background: formData.role === r.id ? "rgba(245,158,11,0.12)" : "rgba(255,255,255,0.04)",
+                      cursor: "pointer",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      gap: 4,
+                      transition: "all 0.2s",
+                    }}
+                  >
+                    <span style={{ fontSize: 22 }}>{r.icon}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: formData.role === r.id ? "#f59e0b" : "#94a3b8" }}>
+                      {r.label}
+                    </span>
+                  </button>
+                ))}
               </div>
-              <h1 className="text-3xl font-semibold text-white tracking-tight">Create your account</h1>
             </div>
-          </div>
 
-          <form onSubmit={handleSubmit} className="space-y-6 mt-8">
-            <Input
-              label="Full Name"
-              name="fullName"
-              placeholder="Enter your full name"
-              value={formData.fullName}
-              onChange={handleChange}
-              required
-              variant="dark"
-            />
-            
-            <Input
-              label="Email Address"
-              type="email"
-              name="email"
-              placeholder="Enter your email"
-              value={formData.email}
-              onChange={handleChange}
-              required
-              variant="dark"
-              icon={({ className }) => (
-                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
-                </svg>
-              )}
-            />
-            
-            <Input
-              label="Phone Number"
-              type="tel"
-              name="phone"
-              placeholder="+1 (555) 000-0000"
-              value={formData.phone}
-              onChange={handleChange}
-              required
-              variant="dark"
-            />
-            
-            <div className="relative">
-              <Input
-                label="Password"
-                type={showPassword ? "text" : "password"}
-                name="password"
-                placeholder="Create a strong password"
-                value={formData.password}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="form-group">
+                <label className="form-label">Full Name</label>
+                <input
+                  className="form-input"
+                  name="fullName"
+                  placeholder="John Smith"
+                  value={formData.fullName}
+                  onChange={handleChange}
+                  required
+                  autoComplete="name"
+                />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Phone Number</label>
+                <input
+                  className="form-input"
+                  type="tel"
+                  name="phone"
+                  placeholder="+1 555 000-0000"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  required
+                  autoComplete="tel"
+                />
+              </div>
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Email Address</label>
+              <input
+                className="form-input"
+                type="email"
+                name="email"
+                placeholder="you@example.com"
+                value={formData.email}
                 onChange={handleChange}
                 required
-                minLength={6}
-                variant="dark"
-                icon={({ className }) => (
-                  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                  </svg>
-                )}
+                autoComplete="email"
               />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-9 text-gray-400 hover:text-gray-300 transition-colors"
-              >
-                {showPassword ? (
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7-1.274 4.057-5.064 7-9.543 7-4.478 0-8.268-2.943-9.543-7a10.025 10.025 0 014.134-5.411z" />
-                  </svg>
-                ) : (
-                  <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                )}
-              </button>
             </div>
-            {/* Role Selection */}
-            <div className="space-y-3">
-              <label className="block text-sm font-medium text-gray-300">Choose your role</label>
-              <div className="grid grid-cols-3 gap-3">
-                <Button
+
+            <div className="form-group">
+              <label className="form-label">Password</label>
+              <div style={{ position: "relative" }}>
+                <input
+                  className="form-input"
+                  type={showPassword ? "text" : "password"}
+                  name="password"
+                  placeholder="Min. 6 characters"
+                  value={formData.password}
+                  onChange={handleChange}
+                  required
+                  minLength={6}
+                  autoComplete="new-password"
+                  style={{ paddingRight: 44 }}
+                />
+                <button
                   type="button"
-                  variant={formData.role === "driver" ? "primary" : "ghost"}
-                  onClick={() => setFormData({ ...formData, role: "driver" })}
-                  className="flex-col h-16 text-sm"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: "absolute",
+                    right: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#64748b",
+                    fontSize: 16,
+                    padding: 0,
+                    lineHeight: 1,
+                  }}
                 >
-                  🚗
-                  Driver
-                </Button>
-                <Button
-                  type="button"
-                  variant={formData.role === "mechanic" ? "success" : "ghost"}
-                  onClick={() => setFormData({ ...formData, role: "mechanic" })}
-                  className="flex-col h-16 text-sm"
-                >
-                  🔧
-                  Mechanic
-                </Button>
-                <Button
-                  type="button"
-                  variant={formData.role === "admin" ? "warning" : "ghost"}
-                  onClick={() => setFormData({ ...formData, role: "admin" })}
-                  className="flex-col h-16 text-sm"
-                >
-                  👤
-                  Admin
-                </Button>
+                  {showPassword ? "🙈" : "👁"}
+                </button>
               </div>
             </div>
-            
-            {/* Terms */}
-            <div className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                id="terms"
-                checked={agreeToTerms}
-                onChange={(e) => setAgreeToTerms(e.target.checked)}
-                className="mt-1 w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
-              />
-              <label htmlFor="terms" className="text-sm text-gray-400">
-                I agree to the{' '}
-                <a href="#" className="text-blue-400 hover:text-blue-300 font-medium transition-colors">
-                  Terms & Conditions
-                </a>
-              </label>
-            </div>
-            
-            {/* Submit */}
-            <Button type="submit" className="w-full" size="lg">
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-              Create Account
-            </Button>
+
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={loading}
+              style={{ width: "100%", padding: "14px", fontSize: 15, marginTop: 4, opacity: loading ? 0.7 : 1 }}
+            >
+              {loading ? "Creating account..." : "Create Account →"}
+            </button>
           </form>
-        </Card>
+
+          <div style={{ marginTop: 24, textAlign: "center", fontSize: 14, color: "#64748b" }}>
+            Already have an account?{" "}
+            <Link to="/" style={{ color: "#f59e0b", fontWeight: 700, textDecoration: "none" }}>
+              Sign in
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   );

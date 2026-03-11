@@ -2,6 +2,7 @@ import express from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import Mechanic from '../models/Mechanic.js';
 
 const router = express.Router();
 
@@ -13,6 +14,12 @@ router.post('/register', async (req, res) => {
 
     const hash = await bcrypt.hash(password, 10);
     const user = await User.create({ fullName, email, phone, passwordHash: hash, role });
+
+    // Auto-create Mechanic profile so the accept/chat routes work immediately
+    if (role === 'mechanic') {
+      await Mechanic.create({ userId: user._id, shopName: fullName || 'My Shop' });
+    }
+
     res.json(user);
   } catch (e) {
     res.status(500).json({ message: e.message });

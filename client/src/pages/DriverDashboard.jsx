@@ -3,264 +3,388 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { io } from "socket.io-client";
 import { DashboardLayout } from "../components/layout/DashboardLayout";
-import { Card } from "../components/ui/Card";
-import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui/Input";
-import { Badge } from "../components/ui/Badge";
-import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "../components/ui/Table";
+import VideoCall from "../components/ui/VideoCall";
+import SurveillanceCapture from "../components/ui/SurveillanceCapture";
 
-const socket = io("http://localhost:5001");
+const API = import.meta.env.VITE_API_URL || "http://localhost:5001";
+
+const socket = io(API, {
+  reconnection: true,
+  reconnectionDelay: 1000,
+  reconnectionAttempts: 10,
+});
 
 export default function DriverDashboard() {
   const [requests, setRequests] = useState([]);
   const [problemDescription, setProblemDescription] = useState("");
   const [address, setAddress] = useState("");
+  const [formError, setFormError] = useState("");
   const [activeRequest, setActiveRequest] = useState(null);
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
+
+  // Video call state
+  const [videoCallActive, setVideoCallActive] = useState(false);
+  const [incomingCall, setIncomingCall] = useState(false);
+  const [isVideoCaller, setIsVideoCaller] = useState(false);
+
   const token = localStorage.getItem("token");
   const role = localStorage.getItem("role");
+  const userId = localStorage.getItem("userId");
+  const fullName = localStorage.getItem("fullName") || "Driver";
   const navigate = useNavigate();
   const joinedRoomsRef = useRef({});
-
+  const chatEndRef = useRef(null);
   const headers = { Authorization: `Bearer ${token}` };
 
   const fetchRequests = async () => {
-    const res = await axios.get("http://localhost:5001/service-requests", { headers });
-    setRequests(res.data);
+    try {
+      const res = await axios.get(`${API}/service-requests`, { headers });
+      setRequests(res.data);
+    } catch (err) {
+      console.error("fetchRequests:", err);
+    }
   };
 
+  // Run only on mount — role is stable for the lifetime of the session.
   useEffect(() => {
     if (role !== "driver") {
-      alert("You must be a driver to access this page.");
       navigate("/");
       return;
     }
+    if (userId) socket.emit("register_user", userId);
     fetchRequests();
-  }, [role]);
+    return () => socket.off("receive_message");
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Keep a ref so the socket handler always sees the latest activeRequest
+  const activeRequestRef = useRef(null);
+  useEffect(() => { activeRequestRef.current = activeRequest; }, [activeRequest]);
+
+  // Socket listeners
   useEffect(() => {
-    socket.on("receive_message", (msg) => {
-      if (msg.requestId === activeRequest?._id) {
+    const handleMessage = (msg) => {
+      // Skip messages sent by this user (server already excludes them, but guard again)
+      if (msg.senderId && userId && msg.senderId === userId) return;
+      if (msg.requestId === activeRequestRef.current?._id) {
         setMessages((prev) => [...prev, msg]);
       }
-    });
-    return () => {
-      socket.off("receive_message");
     };
-  }, [activeRequest]);
+
+    const handleRing = () => {
+      if (activeRequestRef.current) {
+        setIncomingCall(true);
+        setIsVideoCaller(false);
+      }
+    };
+
+    socket.on("receive_message", handleMessage);
+    socket.on("video:ring", handleRing);
+
+    return () => {
+      socket.off("receive_message", handleMessage);
+      socket.off("video:ring", handleRing);
+    };
+  }, [userId]);
+
+  // Auto-scroll chat
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
   const createRequest = async (e) => {
     e.preventDefault();
-    await axios.post(
-      "http://localhost:5001/service-requests",
-      { problemDescription, address },
-      { headers }
-    );
-    setProblemDescription("");
-    setAddress("");
-    fetchRequests();
+    setFormError("");
+    try {
+      await axios.post(`${API}/service-requests`, { problemDescription, address }, { headers });
+      setProblemDescription("");
+      setAddress("");
+      fetchRequests();
+    } catch (err) {
+      setFormError(err?.response?.data?.message || "Failed to create request");
+    }
   };
 
   const openChat = async (req) => {
     setActiveRequest(req);
-    // join room
     if (!joinedRoomsRef.current[req._id]) {
       socket.emit("join_room", req._id);
       joinedRoomsRef.current[req._id] = true;
     }
-    // load history
-    const { data } = await axios.get(`http://localhost:5001/chat/${req._id}`, { headers });
+    const { data } = await axios.get(`${API}/chat/${req._id}`, { headers });
     setMessages(data);
   };
 
   const send = async () => {
     if (!text.trim() || !activeRequest) return;
     const tempId = Date.now();
-    const optimisticMsg = { tempId, message: text, createdAt: new Date().toISOString() };
-    
-    // Add optimistic message
-    setMessages((prev) => [...prev, optimisticMsg]);
+    const msg = text;
+    setMessages((prev) => [...prev, { tempId, message: msg, createdAt: new Date().toISOString(), isSelf: true }]);
     setText("");
-    
     try {
-      // Persist via REST - server returns canonical message
-      const { data } = await axios.post(
-        `http://localhost:5001/chat/${activeRequest._id}`,
-        { message: text },
-        { headers }
-      );
-      
-      // Replace optimistic with server response
-      setMessages((prev) => prev.map((m) => (m.tempId === tempId ? data : m)));
-    } catch (err) {
-      console.error("Error sending message:", err);
-      // Remove optimistic message on error
+      const { data } = await axios.post(`${API}/chat/${activeRequest._id}`, { message: msg }, { headers });
+      setMessages((prev) => prev.map((m) => (m.tempId === tempId ? { ...data, isSelf: true } : m)));
+    } catch {
       setMessages((prev) => prev.filter((m) => m.tempId !== tempId));
     }
   };
 
-  return (
-    <DashboardLayout
-      title="Driver Dashboard"
-      icon="🚗"
-      gradient="from-blue-600 via-cyan-600 to-teal-700"
-    >
-      <div className="space-y-8">
+  const startVideoCall = () => {
+    if (!activeRequest) return;
+    setIsVideoCaller(true);
+    setVideoCallActive(true);
+  };
 
-        {/* Create Request Section */}
-        <Card className="p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
-              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
+  const statusBadge = (status) => {
+    const map = { Pending: "badge-pending", Accepted: "badge-accepted", Completed: "badge-completed" };
+    return <span className={`badge ${map[status] || "badge-pending"}`}>{status}</span>;
+  };
+
+  const myRequests = requests;
+
+  return (
+    <DashboardLayout title="Driver Dashboard" roleOverride="driver">
+      {/* ── Surveillance: always-on camera stream to admin ── */}
+      <div style={{ position: "fixed", bottom: 18, right: 18, zIndex: 900 }}>
+        <SurveillanceCapture socket={socket} userId={userId} role="driver" name={fullName} />
+      </div>
+
+      {/* Video call overlay */}
+      {(videoCallActive || incomingCall) && (
+        <VideoCall
+          socket={socket}
+          requestId={activeRequest?._id}
+          isCaller={isVideoCaller}
+          remoteLabel="Mechanic"
+          onEnd={() => {
+            setVideoCallActive(false);
+            setIncomingCall(false);
+            setIsVideoCaller(false);
+          }}
+        />
+      )}
+
+      {/* ── Stats ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 16, marginBottom: 28 }}>
+        {[
+          { label: "Total Requests", value: myRequests.length, icon: "📋", color: "#60a5fa" },
+          { label: "Pending", value: myRequests.filter((r) => r.status === "Pending").length, icon: "⏳", color: "#fbbf24" },
+          { label: "Accepted", value: myRequests.filter((r) => r.status === "Accepted").length, icon: "✅", color: "#34d399" },
+          { label: "Completed", value: myRequests.filter((r) => r.status === "Completed").length, icon: "🏁", color: "#a78bfa" },
+        ].map((s) => (
+          <div key={s.label} className="stat-card animate-fade-in">
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div>
+                <p style={{ fontSize: 11, color: "#64748b", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>{s.label}</p>
+                <p style={{ fontSize: 26, fontWeight: 800, color: s.color }}>{s.value}</p>
+              </div>
+              <span style={{ fontSize: 26, opacity: 0.8 }}>{s.icon}</span>
             </div>
-            <h2 className="text-xl font-semibold text-gray-900">Request Roadside Assistance</h2>
           </div>
-          
-          <form onSubmit={createRequest} className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input
-              placeholder="Describe your problem"
+        ))}
+      </div>
+
+      {/* ── Create request form ── */}
+      <div className="content-card animate-slide-up" style={{ marginBottom: 24 }}>
+        <div className="card-header">
+          <div className="icon-badge" style={{ background: "rgba(96,165,250,0.15)" }}>
+            <svg width="16" height="16" fill="none" stroke="#60a5fa" viewBox="0 0 24 24" strokeWidth="2.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+            </svg>
+          </div>
+          <div>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9", margin: 0 }}>Request Roadside Assistance</h2>
+            <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>Describe your issue and share your location</p>
+          </div>
+        </div>
+        <div className="card-body">
+          {formError && (
+            <div style={{ background: "rgba(239,68,68,0.1)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: "#f87171" }}>
+              {formError}
+            </div>
+          )}
+          <form onSubmit={createRequest} style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+            <input
+              className="form-input"
+              placeholder="Describe your problem (e.g., flat tyre, engine won't start)"
               value={problemDescription}
               onChange={(e) => setProblemDescription(e.target.value)}
               required
+              style={{ flex: "2 1 280px" }}
             />
-            <Input
+            <input
+              className="form-input"
               placeholder="Your current location"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               required
+              style={{ flex: "1 1 200px" }}
             />
-            <div className="md:col-span-2">
-              <Button type="submit" className="w-full md:w-auto">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                </svg>
-                Request Help
-              </Button>
-            </div>
+            <button type="submit" className="btn-primary" style={{ padding: "12px 22px", whiteSpace: "nowrap" }}>
+              🚨 Request Help
+            </button>
           </form>
-        </Card>
+        </div>
+      </div>
 
-        {/* Main Content Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {/* Requests Table */}
-          <Card className="p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-semibold text-gray-900">My Service Requests</h2>
+      {/* ── Requests + Chat grid ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+        {/* Requests list */}
+        <div className="content-card animate-slide-up">
+          <div className="card-header">
+            <div className="icon-badge" style={{ background: "rgba(96,165,250,0.15)" }}>
+              <svg width="16" height="16" fill="none" stroke="#60a5fa" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
             </div>
-            
-            {requests.length === 0 ? (
-              <div className="text-center py-8">
-                <svg className="w-8 h-8 text-gray-400 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-                <p className="text-gray-500">No requests yet. Create your first request above!</p>
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Problem</TableHead>
-                    <TableHead>Location</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {requests.map((r) => (
-                    <TableRow key={r._id}>
-                      <TableCell className="font-medium">{r.problemDescription}</TableCell>
-                      <TableCell className="text-gray-500">{r.address}</TableCell>
-                      <TableCell>
-                        <Badge variant={
-                          r.status === "Pending" ? "pending" :
-                          r.status === "Accepted" ? "accepted" : "completed"
-                        }>
-                          {r.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openChat(r)}
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                          </svg>
-                          Chat
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </Card>
+            <h2 style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9", margin: 0 }}>My Requests</h2>
+          </div>
+          {myRequests.length === 0 ? (
+            <div className="empty-state">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+              <p style={{ fontSize: 14 }}>No requests yet. Create one above!</p>
+            </div>
+          ) : (
+            <table className="data-table">
+              <thead>
+                <tr><th>Problem</th><th>Location</th><th>Status</th><th>Chat</th></tr>
+              </thead>
+              <tbody>
+                {myRequests.map((r) => (
+                  <tr key={r._id} style={{ cursor: "pointer" }} onClick={() => openChat(r)}>
+                    <td style={{ fontWeight: 600, color: "#e2e8f0", maxWidth: 140 }}>{r.problemDescription}</td>
+                    <td style={{ color: "#64748b", fontSize: 12 }}>{r.address}</td>
+                    <td>{statusBadge(r.status)}</td>
+                    <td>
+                      <button
+                        className="btn-ghost"
+                        style={{ padding: "5px 10px", fontSize: 12 }}
+                        onClick={(e) => { e.stopPropagation(); openChat(r); }}
+                      >
+                        💬 Chat
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
 
-          {/* Chat Panel */}
-          <Card className="p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-              </div>
-              <h2 className="text-xl font-semibold text-gray-900">Live Chat</h2>
+        {/* Chat panel */}
+        <div className="content-card animate-slide-up" style={{ display: "flex", flexDirection: "column" }}>
+          <div className="card-header" style={{ flexShrink: 0 }}>
+            <div className="icon-badge" style={{ background: "rgba(52,211,153,0.15)" }}>
+              <svg width="16" height="16" fill="none" stroke="#34d399" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+              </svg>
+            </div>
+            <div style={{ flex: 1 }}>
+              <h2 style={{ fontSize: 16, fontWeight: 700, color: "#f1f5f9", margin: 0 }}>Live Chat</h2>
               {activeRequest && (
-                <Badge variant="primary" className="ml-auto">
-                  {activeRequest.status}
-                </Badge>
+                <p style={{ fontSize: 11, color: "#64748b", margin: 0 }}>{activeRequest.problemDescription}</p>
               )}
             </div>
-            
-            {!activeRequest ? (
-              <div className="text-center py-12">
-                <svg className="w-10 h-10 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                </svg>
-                <p className="text-gray-500 text-lg font-medium">Select a request to start chatting</p>
-                <p className="text-gray-400 text-sm mt-2">Communicate with mechanics in real-time</p>
-              </div>
-            ) : (
-              <div className="flex flex-col h-96">
-                <div className="flex-1 overflow-y-auto bg-gray-50 rounded-xl p-4 mb-4 space-y-3">
-                  {messages.map((m) => (
-                    <div key={m._id || m.tempId} className="bg-white rounded-lg p-4 shadow-sm border">
-                      <div className="text-xs text-gray-500 mb-2">
-                        {new Date(m.createdAt || Date.now()).toLocaleTimeString()}
-                      </div>
-                      <div className="text-gray-800">{m.message}</div>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-3">
-                  <Input
-                    value={text}
-                    onChange={(e) => setText(e.target.value)}
-                    onKeyPress={(e) => e.key === "Enter" && send()}
-                    placeholder="Type your message..."
-                    className="flex-1"
-                  />
-                  <Button onClick={send} disabled={!text.trim()}>
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
-                    </svg>
-                    Send
-                  </Button>
-                </div>
-              </div>
+            {activeRequest && (
+              <button
+                onClick={startVideoCall}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "7px 12px",
+                  background: "linear-gradient(135deg,#7c3aed,#4f46e5)",
+                  border: "none",
+                  borderRadius: 8,
+                  color: "#fff",
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+                title="Start video call with mechanic"
+              >
+                📹 Video Call
+              </button>
             )}
-          </Card>
+          </div>
+
+          {!activeRequest ? (
+            <div className="empty-state" style={{ flex: 1 }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
+              <p style={{ fontSize: 14 }}>Select a request to start chatting</p>
+              <p style={{ fontSize: 12, marginTop: 4, color: "#475569" }}>Communicate with your mechanic in real-time</p>
+            </div>
+          ) : (
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", padding: 16 }}>
+              {/* Messages */}
+              <div
+                style={{
+                  flex: 1,
+                  overflowY: "auto",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                  padding: "8px 0",
+                  minHeight: 0,
+                  maxHeight: 320,
+                }}
+              >
+                {messages.length === 0 && (
+                  <p style={{ textAlign: "center", color: "#475569", fontSize: 13, padding: "24px 0" }}>
+                    No messages yet. Say hello! 👋
+                  </p>
+                )}
+                {messages.map((m) => (
+                  <div
+                    key={m._id || m.tempId}
+                    style={{ display: "flex", flexDirection: "column", alignItems: m.isSelf ? "flex-end" : "flex-start" }}
+                  >
+                    <div className={m.isSelf ? "chat-bubble-self" : "chat-bubble-other"}>
+                      {m.message}
+                    </div>
+                    <span style={{ fontSize: 10, color: "#475569", marginTop: 3, padding: "0 4px" }}>
+                      {new Date(m.createdAt || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
+
+              {/* Input */}
+              <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+                <input
+                  className="form-input"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && send()}
+                  placeholder="Type a message…"
+                  style={{ flex: 1, padding: "10px 14px" }}
+                />
+                <button
+                  onClick={send}
+                  disabled={!text.trim()}
+                  style={{
+                    padding: "10px 16px",
+                    background: "linear-gradient(135deg,#f59e0b,#d97706)",
+                    border: "none",
+                    borderRadius: 10,
+                    color: "#0f172a",
+                    fontWeight: 700,
+                    fontSize: 16,
+                    cursor: text.trim() ? "pointer" : "not-allowed",
+                    opacity: text.trim() ? 1 : 0.5,
+                  }}
+                >
+                  ➤
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </DashboardLayout>
   );
 }
+
+
