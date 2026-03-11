@@ -5,7 +5,7 @@ import { io } from "socket.io-client";
 import { DashboardLayout } from "../components/layout/DashboardLayout";
 import SurveillancePanel from "../components/ui/SurveillancePanel";
 
-const API = "http://localhost:5001";
+const API = import.meta.env.VITE_API_URL || "http://localhost:5001";
 
 const socket = io(API, {
   reconnection: true,
@@ -47,7 +47,7 @@ function AdminDashboard() {
     const userId = localStorage.getItem("userId");
     if (userId) socket.emit("register_user", userId);
     fetchData();
-  }, [role]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCreateRequest = async (e) => {
     e.preventDefault();
