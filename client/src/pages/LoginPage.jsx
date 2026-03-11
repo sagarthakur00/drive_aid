@@ -1,144 +1,275 @@
 import { useState } from "react";
 import axios from "axios";
 import { useNavigate, Link } from "react-router-dom";
-import { Button } from "../components/ui/Button";
-import { Input } from "../components/ui/Input";
-import { Card } from "../components/ui/Card";
 
 function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
     e.preventDefault();
+    setError("");
+    setLoading(true);
     try {
-      const API = import.meta.env.VITE_API_URL || 'http://localhost:5001';
+      const API = import.meta.env.VITE_API_URL || "http://localhost:5001";
       const res = await axios.post(`${API}/auth/login`, { email, password });
-
       localStorage.setItem("token", res.data.token);
       localStorage.setItem("role", res.data.user.role);
-
+      localStorage.setItem("userId", res.data.user._id);
+      localStorage.setItem("fullName", res.data.user.fullName || res.data.user.email);
       if (res.data.user.role === "admin") navigate("/admin");
       else if (res.data.user.role === "mechanic") navigate("/mechanic");
       else navigate("/driver");
     } catch (err) {
-      console.error('Login error', err?.response || err);
-      const msg = err?.response?.data?.message || err?.message || 'Login failed';
-      alert(msg);
+      setError(err?.response?.data?.message || "Invalid email or password");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center relative overflow-hidden bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50">
-      {/* Enhanced background elements */}
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute top-0 left-0 w-96 h-96 bg-gradient-to-br from-blue-400/20 to-purple-400/20 rounded-full blur-3xl animate-float" />
-        <div className="absolute bottom-0 right-0 w-80 h-80 bg-gradient-to-br from-purple-400/20 to-pink-400/20 rounded-full blur-3xl animate-float" style={{animationDelay: '2s'}} />
-        <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-gradient-to-br from-indigo-400/10 to-blue-400/10 rounded-full blur-3xl animate-float" style={{animationDelay: '4s'}} />
-        
-        {/* Geometric patterns */}
-        <svg className="absolute inset-0 w-full h-full opacity-10" viewBox="0 0 800 800" fill="none">
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="currentColor" strokeWidth="1"/>
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-        </svg>
+    <div className="auth-bg">
+      {/* ── Left: hero image ── */}
+      <div className="auth-image-panel">
+        <img
+          src="https://images.unsplash.com/photo-1530046339160-ce3e530c7d2f?auto=format&fit=crop&w=1200&q=80"
+          alt="Car repair workshop"
+          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          onError={(e) => {
+            e.target.style.display = "none";
+          }}
+        />
+        {/* dark overlay */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            background:
+              "linear-gradient(135deg, rgba(15,23,42,0.75) 0%, rgba(30,27,75,0.7) 100%)",
+          }}
+        />
+        {/* overlay content */}
+        <div
+          style={{
+            position: "absolute",
+            inset: 0,
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "flex-end",
+            padding: "48px",
+          }}
+        >
+          <div className="animate-fade-in">
+            <div
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 8,
+                background: "rgba(245,158,11,0.15)",
+                border: "1px solid rgba(245,158,11,0.3)",
+                borderRadius: 100,
+                padding: "6px 14px",
+                marginBottom: 16,
+              }}
+            >
+              <span style={{ fontSize: 12, fontWeight: 700, color: "#f59e0b", letterSpacing: "0.06em" }}>
+                ⚡ DRIVEAID PLATFORM
+              </span>
+            </div>
+            <h2 style={{ fontSize: 36, fontWeight: 800, color: "#fff", marginBottom: 12, lineHeight: 1.2 }}>
+              Roadside Help,<br />
+              <span className="gradient-text">When You Need It</span>
+            </h2>
+            <p style={{ fontSize: 16, color: "rgba(203,213,225,0.85)", maxWidth: 360, lineHeight: 1.6 }}>
+              Connect with certified mechanics instantly. Get your vehicle back on the road fast.
+            </p>
+            <div style={{ display: "flex", gap: 32, marginTop: 28 }}>
+              {[["500+", "Mechanics"], ["24/7", "Support"], ["4.9★", "Rating"]].map(([val, lbl]) => (
+                <div key={lbl}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: "#f59e0b" }}>{val}</div>
+                  <div style={{ fontSize: 12, color: "#94a3b8" }}>{lbl}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Centered login card */}
-      <Card variant="glass" className="relative w-[480px] max-w-[90%] px-12 pt-20 pb-12 shadow-2xl shadow-blue-500/10">
-        {/* Floating icon tile */}
-        <div className="absolute -top-8 left-1/2 -translate-x-1/2 w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 shadow-lg shadow-blue-500/25 flex items-center justify-center animate-float">
-          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-          </svg>
-        </div>
-
-        <div className="text-center space-y-2">
-          <h1 className="text-3xl font-bold gradient-text">Welcome to DriveAid</h1>
-          <p className="text-gray-600 text-sm">
-            Sign in to access your dashboard and manage your services
-          </p>
-        </div>
-
-        <form onSubmit={handleLogin} className="mt-8 space-y-6">
-          <Input
-            type="email"
-            placeholder="Enter your email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            variant="glass"
-            icon={({ className }) => (
-              <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            )}
-          />
-
-          <div className="relative">
-            <Input
-              type={showPassword ? 'text' : 'password'}
-              placeholder="Enter your password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              variant="glass"
-              icon={({ className }) => (
-                <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              )}
-            />
-            <button
-              type="button"
-              onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+      {/* ── Right: login form ── */}
+      <div className="auth-form-panel animate-fade-in">
+        <div style={{ width: "100%", maxWidth: 400 }}>
+          {/* Logo */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 40 }}>
+            <div
+              style={{
+                width: 44,
+                height: 44,
+                borderRadius: 12,
+                background: "linear-gradient(135deg, #f59e0b, #d97706)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: 22,
+                boxShadow: "0 4px 16px rgba(245,158,11,0.35)",
+              }}
             >
-              {showPassword ? (
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59"/>
-                </svg>
+              🔧
+            </div>
+            <span style={{ fontSize: 22, fontWeight: 800, color: "#f1f5f9", letterSpacing: "-0.02em" }}>
+              Drive<span style={{ color: "#f59e0b" }}>Aid</span>
+            </span>
+          </div>
+
+          <h1 style={{ fontSize: 28, fontWeight: 800, color: "#f1f5f9", marginBottom: 6 }}>
+            Welcome back
+          </h1>
+          <p style={{ fontSize: 14, color: "#64748b", marginBottom: 32 }}>
+            Sign in to access your dashboard
+          </p>
+
+          {error && (
+            <div
+              style={{
+                background: "rgba(239,68,68,0.12)",
+                border: "1px solid rgba(239,68,68,0.25)",
+                borderRadius: 10,
+                padding: "12px 16px",
+                marginBottom: 20,
+                fontSize: 14,
+                color: "#f87171",
+                display: "flex",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              <span>⚠</span> {error}
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+            <div className="form-group">
+              <label className="form-label">Email address</label>
+              <input
+                className="form-input"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                autoComplete="email"
+              />
+            </div>
+
+            <div className="form-group">
+              <label className="form-label">Password</label>
+              <div style={{ position: "relative" }}>
+                <input
+                  className="form-input"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  autoComplete="current-password"
+                  style={{ paddingRight: 44 }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  style={{
+                    position: "absolute",
+                    right: 12,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    cursor: "pointer",
+                    color: "#64748b",
+                    fontSize: 16,
+                    padding: 0,
+                    lineHeight: 1,
+                  }}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? "🙈" : "👁"}
+                </button>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <a href="#" style={{ fontSize: 13, color: "#f59e0b", textDecoration: "none", fontWeight: 600 }}>
+                Forgot password?
+              </a>
+            </div>
+
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={loading}
+              style={{ width: "100%", padding: "14px", fontSize: 15, marginTop: 4, opacity: loading ? 0.7 : 1 }}
+            >
+              {loading ? (
+                <>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: "spin 1s linear infinite" }}>
+                    <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" strokeLinecap="round"/>
+                  </svg>
+                  Signing in...
+                </>
               ) : (
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-                </svg>
+                "Sign In →"
               )}
             </button>
-          </div>
+          </form>
 
-          <div className="flex justify-end">
-            <a href="#" className="text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors">
-              Forgot password?
-            </a>
-          </div>
-
-          <Button type="submit" className="w-full" size="lg">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-            </svg>
-            Sign In
-          </Button>
-
-        </form>
-
-        <div className="mt-8 text-center">
-          <p className="text-sm text-gray-600">
-            Don't have an account?{' '}
-            <Link 
-              to="/register" 
-              className="font-semibold text-blue-600 hover:text-blue-700 transition-colors"
-            >
-              Sign up here
+          <div style={{ marginTop: 28, textAlign: "center", fontSize: 14, color: "#64748b" }}>
+            New to DriveAid?{" "}
+            <Link to="/register" style={{ color: "#f59e0b", fontWeight: 700, textDecoration: "none" }}>
+              Create an account
             </Link>
-          </p>
+          </div>
+
+          {/* Role hint */}
+          <div
+            style={{
+              marginTop: 32,
+              background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(148,163,184,0.1)",
+              borderRadius: 12,
+              padding: "14px 16px",
+            }}
+          >
+            <p style={{ fontSize: 11, color: "#475569", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, marginBottom: 8 }}>
+              Available roles
+            </p>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {[["🚗", "Driver"], ["🔧", "Mechanic"], ["👨‍💼", "Admin"]].map(([icon, role]) => (
+                <span
+                  key={role}
+                  style={{
+                    fontSize: 12,
+                    color: "#94a3b8",
+                    background: "rgba(148,163,184,0.08)",
+                    border: "1px solid rgba(148,163,184,0.12)",
+                    borderRadius: 8,
+                    padding: "4px 10px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                  }}
+                >
+                  {icon} {role}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
-      </Card>
+      </div>
+
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

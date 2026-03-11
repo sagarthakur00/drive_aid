@@ -120,31 +120,41 @@ router.post("/:id/accept", auth("mechanic"), async (req, res) => {
   try {
     const { id: userId } = req.user;
 
-    const request = await ServiceRequest.findById(req.params.id);
-    if (!request) {
+    // Check the request exists and is still Pending
+    const existing = await ServiceRequest.findById(req.params.id).select("status");
+    if (!existing) {
       return res.status(404).json({ message: "Service request not found" });
     }
-
-    if (request.status !== "Pending") {
-      return res
-        .status(400)
-        .json({ message: "Request already accepted by another mechanic" });
+    if (existing.status !== "Pending") {
+      return res.status(400).json({ message: "Request already accepted by another mechanic" });
     }
 
-    // Map user -> mechanic profile id
-    const mech = await Mechanic.findOne({ userId: userId }).select("_id isVerified");
+    // Map user → mechanic profile (auto-create for legacy accounts)
+    let mech = await Mechanic.findOne({ userId: userId }).select("_id");
     if (!mech) {
-      return res.status(403).json({ message: "Mechanic profile not found" });
+      mech = await Mechanic.create({ userId: userId, shopName: "Mechanic" });
     }
 
-    request.mechanicId = mech._id;
-    request.status = "Accepted";
-    await request.save();
+    // Build update: always set mechanicId + status.
+    // Also $unset userLocation if it is malformed (empty/missing coordinates) so MongoDB's
+    // 2dsphere index does not reject the write on existing corrupted documents.
+    const existingFull = await ServiceRequest.findById(req.params.id).select("userLocation").lean();
+    const coords = existingFull?.userLocation?.coordinates;
+    const hasBadGeo = !coords || coords.length === 0;
 
-    res.json(request);
+    const updateOp = { $set: { mechanicId: mech._id, status: "Accepted" } };
+    if (hasBadGeo) updateOp.$unset = { userLocation: "" };
+
+    const updated = await ServiceRequest.findByIdAndUpdate(
+      req.params.id,
+      updateOp,
+      { new: true, runValidators: false }
+    );
+
+    res.json(updated);
   } catch (err) {
     console.error("Error accepting service request:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: err.message || "Server error" });
   }
 });
 
