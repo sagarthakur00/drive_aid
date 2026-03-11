@@ -12,9 +12,10 @@ import chatRoutes from './routes/chat.js';
 dotenv.config();
 const app = express();
 app.use(express.json());
+const corsOrigin = process.env.CLIENT_URL || '*';
 app.use(cors({
-  origin: process.env.CLIENT_URL || '*',
-  credentials: true,
+  origin: corsOrigin,
+  credentials: corsOrigin !== '*',
 }));
 
 // MongoDB connect + one-time geo field cleanup
@@ -57,7 +58,7 @@ if (process.env.MONGO_URI) {
 // HTTP + Socket.IO
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: process.env.CLIENT_URL || '*', credentials: true },
+  cors: { origin: corsOrigin, credentials: corsOrigin !== '*' },
   pingTimeout: 60000,
   pingInterval: 25000,
 });

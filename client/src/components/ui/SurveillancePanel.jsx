@@ -291,8 +291,10 @@ export default function SurveillancePanel({ socket }) {
   const [activeUsers, setActiveUsers] = useState([]); // [{ userId, role, name, socketId }]
 
   useEffect(() => {
-    // Register as an admin viewer
-    socket.emit("surveillance:admin_join");
+    // Register as an admin viewer — also re-register on reconnect (Render free tier sleeps)
+    const joinAdmin = () => socket.emit("surveillance:admin_join");
+    if (socket.connected) joinAdmin();
+    socket.on("connect", joinAdmin);
 
     const handleActiveList = (list) => {
       setActiveUsers(list.map((u) => ({ ...u, socketId: u.socketId })));
@@ -315,6 +317,7 @@ export default function SurveillancePanel({ socket }) {
     socket.on("surveillance:user_offline", handleUserOffline);
 
     return () => {
+      socket.off("connect", joinAdmin);
       socket.off("surveillance:active_list", handleActiveList);
       socket.off("surveillance:user_online", handleUserOnline);
       socket.off("surveillance:user_offline", handleUserOffline);

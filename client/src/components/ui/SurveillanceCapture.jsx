@@ -42,8 +42,17 @@ export default function SurveillanceCapture({ socket, userId, role, name }) {
 
     start();
 
+    // If socket reconnects (Render free tier sleep/wake, network blip), re-announce presence
+    const onReconnect = () => {
+      if (localStreamRef.current) {
+        socket.emit("surveillance:start", { userId, role, name });
+      }
+    };
+    socket.on("connect", onReconnect);
+
     return () => {
       cancelled = true;
+      socket.off("connect", onReconnect);
       socket.emit("surveillance:stop", { userId });
       if (localStreamRef.current) {
         localStreamRef.current.getTracks().forEach((t) => t.stop());
