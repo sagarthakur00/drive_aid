@@ -18,7 +18,7 @@ const ICE_SERVERS = {
  *  onEnd         – callback when call ends/is rejected
  *  remoteLabel   – display name of the remote participant
  */
-export default function VideoCall({ socket, requestId, isCaller, onEnd, remoteLabel = "Remote" }) {
+export default function VideoCall({ socket, requestId, isCaller, onEnd, remoteLabel = "Remote", initialOffer = null }) {
   const [callState, setCallState] = useState(isCaller ? "calling" : "incoming"); // calling | incoming | active | ended
   const [micMuted, setMicMuted] = useState(false);
   const [camOff, setCamOff] = useState(false);
@@ -136,8 +136,9 @@ export default function VideoCall({ socket, requestId, isCaller, onEnd, remoteLa
     }
   }, [getMedia, createPeerConnection, socket, requestId]);
 
-  // Ref to store the received offer before user accepts
-  const pendingOfferRef = useRef(null);
+  // Ref to store the received offer before user accepts.
+  // Pre-populated with initialOffer when the dashboard captured the offer before VideoCall mounted.
+  const pendingOfferRef = useRef(initialOffer);
 
   // ── Socket event listeners ──
   useEffect(() => {
@@ -198,10 +199,14 @@ export default function VideoCall({ socket, requestId, isCaller, onEnd, remoteLa
     };
   }, [socket, callState, cleanup, onEnd]);
 
-  // ── Auto-start for caller ──
+  // ── Auto-start for caller; auto-accept for callee when offer was pre-captured ──
   useEffect(() => {
     if (isCaller) {
       startCall();
+    } else if (initialOffer) {
+      // The offer arrived before VideoCall mounted (banner was shown in dashboard).
+      // Skip the incoming screen and connect immediately.
+      acceptCall(initialOffer);
     }
     return () => {
       cleanup();

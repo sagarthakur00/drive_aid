@@ -72,9 +72,13 @@ function MechanicDashboard() {
     refreshRequests();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Socket listeners — activeRequest stored in ref so handlers stay fresh
   const activeRequestRef = useRef(null);
   useEffect(() => { activeRequestRef.current = activeRequest; }, [activeRequest]);
+
+  // Capture video:offer at dashboard level so it's available before VideoCall mounts.
+  // Without this, the offer arrives while the ring banner is showing (VideoCall not yet mounted)
+  // and gets lost. The ref is passed as initialOffer to VideoCall.
+  const incomingOfferRef = useRef(null);
 
   useEffect(() => {
     const handleMessage = (msg) => {
@@ -98,12 +102,19 @@ function MechanicDashboard() {
       }
     };
 
+    // Capture the offer before VideoCall mounts so it isn't lost
+    const handleVideoOffer = ({ offer }) => {
+      incomingOfferRef.current = offer;
+    };
+
     socket.on("receive_message", handleMessage);
     socket.on("video:ring", handleRing);
+    socket.on("video:offer", handleVideoOffer);
 
     return () => {
       socket.off("receive_message", handleMessage);
       socket.off("video:ring", handleRing);
+      socket.off("video:offer", handleVideoOffer);
     };
   }, []);
 
@@ -204,7 +215,6 @@ function MechanicDashboard() {
           <div style={{ display: "flex", gap: 10 }}>
             <button
               onClick={() => {
-                // Use requestId from ring event, else active request, else first accepted
                 const targetId = incomingCallRequestId !== "incoming" ? incomingCallRequestId : null;
                 const target = (targetId && requests.find((r) => r._id === targetId))
                   || activeRequestRef.current
@@ -224,6 +234,7 @@ function MechanicDashboard() {
             >Accept</button>
             <button
               onClick={() => {
+                incomingOfferRef.current = null;
                 const targetId = incomingCallRequestId !== "incoming" ? incomingCallRequestId : null;
                 const target = (targetId && requests.find((r) => r._id === targetId))
                   || activeRequestRef.current
@@ -246,8 +257,10 @@ function MechanicDashboard() {
           socket={socket}
           requestId={activeRequest?._id || requests.find((r) => r.status === "Accepted")?._id}
           isCaller={isVideoCaller}
+          initialOffer={isVideoCaller ? null : incomingOfferRef.current}
           remoteLabel="Driver"
           onEnd={() => {
+            incomingOfferRef.current = null;
             setVideoCallActive(false);
             setIncomingCallRequestId(null);
             setIsVideoCaller(false);
