@@ -107,14 +107,21 @@ function MechanicDashboard() {
       incomingOfferRef.current = offer;
     };
 
+    const handleRequestDeleted = ({ id }) => {
+      setRequests((prev) => prev.filter((r) => r._id !== id));
+      if (activeRequestRef.current?._id === id) setActiveRequest(null);
+    };
+
     socket.on("receive_message", handleMessage);
     socket.on("video:ring", handleRing);
     socket.on("video:offer", handleVideoOffer);
+    socket.on("request:deleted", handleRequestDeleted);
 
     return () => {
       socket.off("receive_message", handleMessage);
       socket.off("video:ring", handleRing);
       socket.off("video:offer", handleVideoOffer);
+      socket.off("request:deleted", handleRequestDeleted);
     };
   }, []);
 
@@ -176,16 +183,6 @@ function MechanicDashboard() {
     setVideoCallActive(true);
   };
 
-  const deleteRequest = async (id) => {
-    if (!window.confirm("Delete this completed request? This cannot be undone.")) return;
-    try {
-      await axios.delete(`${API}/service-requests/${id}`, { headers });
-      if (activeRequest?._id === id) setActiveRequest(null);
-      refreshRequests();
-    } catch (err) {
-      alert(err?.response?.data?.message || "Failed to delete request");
-    }
-  };
 
   const statusBadge = (status) => {
     const map = { Pending: "badge-pending", Accepted: "badge-accepted", Completed: "badge-completed" };
@@ -347,23 +344,6 @@ function MechanicDashboard() {
                           {r.status !== "Pending" && (
                             <button className="btn-ghost" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => openChat(r)}>
                               💬
-                            </button>
-                          )}
-                          {r.status === "Completed" && (
-                            <button
-                              onClick={() => deleteRequest(r._id)}
-                              style={{
-                                padding: "4px 10px",
-                                fontSize: 12,
-                                background: "rgba(239,68,68,0.12)",
-                                border: "1px solid rgba(239,68,68,0.25)",
-                                borderRadius: 8,
-                                color: "#f87171",
-                                fontWeight: 600,
-                                cursor: "pointer",
-                              }}
-                            >
-                              🗑 Delete
                             </button>
                           )}
                         </div>

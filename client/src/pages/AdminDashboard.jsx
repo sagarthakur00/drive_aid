@@ -49,6 +49,16 @@ function AdminDashboard() {
     fetchData();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const deleteRequest = async (id) => {
+    if (!window.confirm("Delete this request permanently? It will also be removed for the driver and mechanic.")) return;
+    try {
+      await axios.delete(`${API}/service-requests/${id}`, { headers });
+      setRequests((prev) => prev.filter((r) => r._id !== id));
+    } catch (err) {
+      alert(err?.response?.data?.message || "Failed to delete request");
+    }
+  };
+
   const handleCreateRequest = async (e) => {
     e.preventDefault();
     setFormError("");
@@ -226,6 +236,7 @@ function AdminDashboard() {
                   <th>Description</th>
                   <th>Address</th>
                   <th>Status</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -240,6 +251,32 @@ function AdminDashboard() {
                       }`}>
                         {r.status}
                       </span>
+                    </td>
+                    <td>
+                      {r.status === "Completed" && (
+                        <button
+                          onClick={() => deleteRequest(r._id)}
+                          title="Delete this request"
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 5,
+                            padding: "4px 10px",
+                            fontSize: 12,
+                            background: "rgba(239,68,68,0.12)",
+                            border: "1px solid rgba(239,68,68,0.3)",
+                            borderRadius: 8,
+                            color: "#f87171",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            transition: "all 0.18s",
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.25)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "rgba(239,68,68,0.12)"; }}
+                        >
+                          🗑 Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

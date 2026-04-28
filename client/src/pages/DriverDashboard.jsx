@@ -78,12 +78,19 @@ export default function DriverDashboard() {
       }
     };
 
+    const handleRequestDeleted = ({ id }) => {
+      setRequests((prev) => prev.filter((r) => r._id !== id));
+      if (activeRequest?._id === id) setActiveRequest(null);
+    };
+
     socket.on("receive_message", handleMessage);
     socket.on("video:ring", handleRing);
+    socket.on("request:deleted", handleRequestDeleted);
 
     return () => {
       socket.off("receive_message", handleMessage);
       socket.off("video:ring", handleRing);
+      socket.off("request:deleted", handleRequestDeleted);
     };
   }, [userId]);
 
@@ -135,16 +142,6 @@ export default function DriverDashboard() {
     setVideoCallActive(true);
   };
 
-  const deleteRequest = async (id) => {
-    if (!window.confirm("Delete this request? This cannot be undone.")) return;
-    try {
-      await axios.delete(`${API}/service-requests/${id}`, { headers });
-      if (activeRequest?._id === id) setActiveRequest(null);
-      fetchRequests();
-    } catch (err) {
-      alert(err?.response?.data?.message || "Failed to delete request");
-    }
-  };
 
   const statusBadge = (status) => {
     const map = { Pending: "badge-pending", Accepted: "badge-accepted", Completed: "badge-completed" };
@@ -275,23 +272,6 @@ export default function DriverDashboard() {
                         >
                           💬 Chat
                         </button>
-                        {r.status === "Pending" && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); deleteRequest(r._id); }}
-                            style={{
-                              padding: "5px 10px",
-                              fontSize: 12,
-                              background: "rgba(239,68,68,0.12)",
-                              border: "1px solid rgba(239,68,68,0.25)",
-                              borderRadius: 8,
-                              color: "#f87171",
-                              fontWeight: 600,
-                              cursor: "pointer",
-                            }}
-                          >
-                            🗑 Delete
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>
