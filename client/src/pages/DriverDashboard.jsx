@@ -135,6 +135,17 @@ export default function DriverDashboard() {
     setVideoCallActive(true);
   };
 
+  const deleteRequest = async (id) => {
+    if (!window.confirm("Delete this request? This cannot be undone.")) return;
+    try {
+      await axios.delete(`${API}/service-requests/${id}`, { headers });
+      if (activeRequest?._id === id) setActiveRequest(null);
+      fetchRequests();
+    } catch (err) {
+      alert(err?.response?.data?.message || "Failed to delete request");
+    }
+  };
+
   const statusBadge = (status) => {
     const map = { Pending: "badge-pending", Accepted: "badge-accepted", Completed: "badge-completed" };
     return <span className={`badge ${map[status] || "badge-pending"}`}>{status}</span>;
@@ -247,7 +258,7 @@ export default function DriverDashboard() {
           ) : (
             <table className="data-table">
               <thead>
-                <tr><th>Problem</th><th>Location</th><th>Status</th><th>Chat</th></tr>
+                <tr><th>Problem</th><th>Location</th><th>Status</th><th>Actions</th></tr>
               </thead>
               <tbody>
                 {myRequests.map((r) => (
@@ -256,13 +267,32 @@ export default function DriverDashboard() {
                     <td style={{ color: "#64748b", fontSize: 12 }}>{r.address}</td>
                     <td>{statusBadge(r.status)}</td>
                     <td>
-                      <button
-                        className="btn-ghost"
-                        style={{ padding: "5px 10px", fontSize: 12 }}
-                        onClick={(e) => { e.stopPropagation(); openChat(r); }}
-                      >
-                        💬 Chat
-                      </button>
+                      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                        <button
+                          className="btn-ghost"
+                          style={{ padding: "5px 10px", fontSize: 12 }}
+                          onClick={(e) => { e.stopPropagation(); openChat(r); }}
+                        >
+                          💬 Chat
+                        </button>
+                        {r.status === "Pending" && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); deleteRequest(r._id); }}
+                            style={{
+                              padding: "5px 10px",
+                              fontSize: 12,
+                              background: "rgba(239,68,68,0.12)",
+                              border: "1px solid rgba(239,68,68,0.25)",
+                              borderRadius: 8,
+                              color: "#f87171",
+                              fontWeight: 600,
+                              cursor: "pointer",
+                            }}
+                          >
+                            🗑 Delete
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

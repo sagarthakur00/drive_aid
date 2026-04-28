@@ -112,6 +112,56 @@ router.post("/", auth(), async (req, res) => {
 
 /**
  * ====================================================
+ *  DELETE /service-requests/:id
+ *  - Driver: can delete their own request (only if Pending)
+ *  - Mechanic: can delete a request assigned to them (only if Completed)
+ *  - Admin: can delete any request
+ * ====================================================
+ */
+router.delete("/:id", auth(), async (req, res) => {
+  try {
+    const { role, id: userId } = req.user;
+
+    const request = await ServiceRequest.findById(req.params.id);
+    if (!request) {
+      return res.status(404).json({ message: "Service request not found" });
+    }
+
+    if (role === "driver") {
+      // Driver can only delete their own Pending requests
+      if (request.driverId?.toString() !== userId) {
+        return res.status(403).json({ message: "You can only delete your own requests" });
+      }
+      if (request.status !== "Pending") {
+        return res.status(400).json({ message: "Only Pending requests can be deleted" });
+      }
+    } else if (role === "mechanic") {
+      // Mechanic can only delete Completed requests assigned to them
+      const mech = await Mechanic.findOne({ userId }).select("_id");
+      if (!mech || request.mechanicId?.toString() !== mech._id.toString()) {
+        return res.status(403).json({ message: "You can only delete requests assigned to you" });
+      }
+      if (request.status !== "Completed") {
+        return res.status(400).json({ message: "Only Completed requests can be deleted" });
+      }
+    }
+    // Admin can delete any request (no extra checks)
+
+    await ServiceRequest.findByIdAndDelete(req.params.id);
+
+    // Notify all connected clients that the request was removed
+    const io = req.app.get("io");
+    if (io) io.emit("request:deleted", { id: req.params.id });
+
+    res.json({ message: "Request deleted successfully" });
+  } catch (err) {
+    console.error("Error deleting service request:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+/**
+ * ====================================================
  *  POST /service-requests/:id/accept
  *  - Mechanic accepts a request
  * ====================================================
